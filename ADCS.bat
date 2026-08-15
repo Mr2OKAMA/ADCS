@@ -68,6 +68,27 @@ if %DEBUG_MODE% EQU 1 (
     call :log [DEBUG] 実行ユーザー: %USERNAME%
     call :log [DEBUG] 実行コンピュータ: %COMPUTERNAME%
     call :log [DEBUG] SP_DOC_ROOT: %SP_DOC_ROOT%
+    
+    REM OneDrive同期の詳細状態を確認
+    call :log [DEBUG] === OneDrive同期状態の詳細確認 ===
+    powershell -NoProfile -Command "Get-Process OneDrive -ErrorAction SilentlyContinue | Select-Object Name, Handle" >> "!LOGFILE!" 2>&1
+    
+    REM OneDriveフォルダ属性を確認
+    call :log [DEBUG] === OneDriveフォルダ属性 ===
+    attrib "%BASE_ONEDRIVE%" >> "!LOGFILE!" 2>&1
+    
+    REM OneDrive設定ファイルの確認
+    call :log [DEBUG] === OneDrive設定確認 ===
+    dir "%APPDATA%\Microsoft\OneDrive" /S >> "!LOGFILE!" 2>&1
+    
+    REM 実行ユーザーのOneDriveパスを完全に表示
+    call :log [DEBUG] === 環境変数の確認 ===
+    echo OneDrive=%OneDrive%>> "!LOGFILE!" 2>&1
+    echo OneDriveCommercial=%OneDriveCommercial%>> "!LOGFILE!" 2>&1
+    
+    REM ネットワークドライブの確認
+    call :log [DEBUG] === ネットワークドライブ確認 ===
+    net use >> "!LOGFILE!" 2>&1
 )
 
 echo ===========================================
@@ -179,7 +200,7 @@ if exist "%%D:\" (
         dir "!SRC_DIR!" *.DAD >> "!LOGFILE!" 2>&1
     )
 
-    :: ========= SharePoint（MOVE） =========
+    :: ========= SharePoint（COPY） =========
     set "DEST_SP=!SAVE_BASE!\!FOLDER_NAME!!SUB_PATH!"
     if not exist "!DEST_SP!" mkdir "!DEST_SP!" >nul 2>&1
     if not exist "!DEST_SP!" (
@@ -189,14 +210,27 @@ if exist "%%D:\" (
 
     if %DEBUG_MODE% EQU 1 (
         call :log [DEBUG][%%D:] robocopy実行前：DEST_SP= !DEST_SP!
+        call :log [DEBUG][%%D:] *** コピー先の親フォルダ属性 ***
+        for %%P in ("!DEST_SP!") do (
+            attrib "%%~dpP" >> "!LOGFILE!" 2>&1
+        )
     )
 
-    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /MOVE /R:0 /W:0 >> "!LOGFILE!" 2>&1
+    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!LOGFILE!" 2>&1
     set "RC=!errorlevel!"
     
     if %DEBUG_MODE% EQU 1 (
         call :log [DEBUG][%%D:] robocopy リターンコード: !RC!
-        call :log [DEBUG][%%D:] *** robocopy実行後のコピー先の内容 ***
+        call :log [DEBUG][%%D:] *** robocopy実行直後のコピー先の内容 ***
+        dir "!DEST_SP!" >> "!LOGFILE!" 2>&1
+        
+        call :log [DEBUG][%%D:] *** コピー先のファイル属性 ***
+        attrib "!DEST_SP!" /S >> "!LOGFILE!" 2>&1
+        
+        REM 2秒待機後に再確認（OneDriveの同期を待つ）
+        call :log [DEBUG][%%D:] OneDrive同期待機中...
+        timeout /t 2 > nul
+        call :log [DEBUG][%%D:] *** 2秒後のコピー先の内容（同期確認） ***
         dir "!DEST_SP!" >> "!LOGFILE!" 2>&1
     )
 
@@ -232,7 +266,7 @@ if exist "%%D:\" (
                 call :log [DEBUG][%%D:] robocopy実行前（Iドライブ）：DEST_I= !DEST_I!
             )
 
-            robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /R:0 /W:0 >> "!LOGFILE!" 2>&1
+            robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!LOGFILE!" 2>&1
             set "RC=!errorlevel!"
             
             if %DEBUG_MODE% EQU 1 (
