@@ -10,11 +10,6 @@ title 【実行中】SDカード自動識別システム
 chcp 932 > nul
 
 :: ==============================
-:: デバッグモード（1=ON, 0=OFF）
-:: ==============================
-set "DEBUG_MODE=0"
-
-:: ==============================
 :: ログ
 :: ==============================
 set "LOGDIR=%~dp0logs"
@@ -163,7 +158,7 @@ if exist "%%D:\" (
         goto wait_eject
     )
 
-    :: robocopyを実行（詳細ログを別途ファイルに）
+    :: robocopyを実行
     set "ROBOCOPY_LOG=%LOGDIR%\ROBOCOPY_%LOGDATE%.log"
     robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!ROBOCOPY_LOG!" 2>&1
     set "RC=!errorlevel!"
@@ -175,15 +170,8 @@ if exist "%%D:\" (
     ) else (
         call :log [OK][%%D:] SharePoint転送成功 DEST=!DEST_SP!
         
-        REM OneDrive同期を待つ（最大10秒）
-        set "WAIT_COUNT=0"
-        :sync_wait
-        if !WAIT_COUNT! GEQ 10 goto sync_done
-        timeout /t 1 > nul
-        set /a WAIT_COUNT+=1
-        goto sync_wait
-        
-        :sync_done
+        REM OneDrive同期を待つ（最大5秒）
+        timeout /t 5 > nul
     )
 
     :: ========= Iドライブ（COPY） =========
