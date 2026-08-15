@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableDelayedExpansion
 
 :: ==============================
 :: 実行中タイトル表示
@@ -10,24 +10,51 @@ title 【実行中】SDカード自動識別システム
 chcp 932 > nul
 
 :: ==============================
-:: 現在年月（YYYYMM）
+:: ログ
 :: ==============================
-set "YYYY=%date:~0,4%"
-set "MM=%date:~5,2%"
-set "YYYYMM=%YYYY%%MM%"
+set "LOGDIR=%~dp0logs"
+if not exist "%LOGDIR%" mkdir "%LOGDIR%" >nul 2>&1
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "LOGDATE=%%i"
+set "LOGFILE=%LOGDIR%\ADCS_%LOGDATE%.log"
+
+call :log ===========================================
+call :log SDカード自動識別システム（共通版） 起動
 
 :: ==============================
-:: OneDrive（SharePoint）ルート
-:: ※ ユーザー共通対応
+:: 現在年月（YYYYMM）環境非依存
 :: ==============================
-set "BASE_ONEDRIVE=%USERPROFILE%\OneDrive - 水ing株式会社"
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMM"') do set "YYYYMM=%%i"
+if not defined YYYYMM (
+    call :log [ERROR] YYYYMM の取得に失敗しました。
+    echo [ERROR] YYYYMM の取得に失敗しました。
+    pause
+    exit /b 1
+)
+
+:: ==============================
+:: OneDrive（SharePoint）ルート自動検出
+:: ==============================
+set "BASE_ONEDRIVE="
+if defined OneDriveCommercial set "BASE_ONEDRIVE=%OneDriveCommercial%"
+if not defined BASE_ONEDRIVE if defined OneDrive set "BASE_ONEDRIVE=%OneDrive%"
+
+if not defined BASE_ONEDRIVE (
+    call :log [ERROR] OneDrive の業務用パスを取得できませんでした。
+    echo [ERROR] OneDrive のパスが取得できません。
+    echo OneDrive にサインイン後、再実行してください。
+    pause
+    exit /b 1
+)
 
 :: ==============================
 :: SharePoint 保存先ベース
 :: ==============================
-set "BASE_YOKOGAWA=%BASE_ONEDRIVE%\SAM_中部チーム - ドキュメント\B01_木曽川右岸管理事務所\5215木曽川右岸【契約業務】\104.運転・運用記録\02_点検、記録\03_検針\01_R8年度\01_流量計記録確認\01_横河"
-set "BASE_MSYSTEM=%BASE_ONEDRIVE%\SAM_中部チーム - ドキュメント\B01_木曽川右岸管理事務所\5215木曽川右岸【契約業務】\104.運転・運用記録\02_点検、記録\03_検針\01_R8年度\01_流量計記録確認\02_Mシステム"
-set "BASE_FUJI=%BASE_ONEDRIVE%\SAM_中部チーム - ドキュメント\B01_木曽川右岸管理事務所\5215木曽川右岸【契約業務】\104.運転・運用記録\02_点検、記録\03_検針\01_R8年度\01_流量計記録確認\03_フジ"
+set "SP_DOC_ROOT=%BASE_ONEDRIVE%\SAM_中部チーム - ドキュメント\B01_木曽川右岸管理事務所\5215木曽川右岸【契約業務】\104.運転・運用記録\02_点検、記録"
+set "BASE_YOKOGAWA=%SP_DOC_ROOT%\03_検針\01_横河"
+set "BASE_MSYSTEM=%SP_DOC_ROOT%\03_検針\02_Mシステム"
+set "BASE_FUJI=%SP_DOC_ROOT%\03_検針\03_フジ"
+
+call :log SharePoint：%BASE_ONEDRIVE%
 
 echo ===========================================
 echo   SDカード自動識別システム（共通版）
@@ -36,6 +63,7 @@ echo 状態：実行中
 echo SharePoint：%BASE_ONEDRIVE%
 echo Iドライブ：id_00.txt がある場合のみコピー
 echo 対象フォルダ：DATA0 / 71VR / S000000
+echo ログ：%LOGFILE%
 echo ※ 終了：Ctrl + C
 echo ===========================================
 echo.
@@ -44,7 +72,7 @@ echo.
 for %%D in (D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
 if exist "%%D:\" (
 
-    echo [%%D: 検出] 判定中...
+    call :log [%%D: 検出] 判定中...
 
     set "FOLDER_NAME="
     set "SAVE_BASE="
@@ -114,24 +142,50 @@ if exist "%%D:\" (
         set "SRC_DIR=%%D:\S000000"
     )
 
-    if "!SRC_DIR!"=="" goto wait_eject
+    if "!SRC_DIR!"=="" (
+        call :log [%%D:] 対象フォルダなし（DATA0/71VR/S000000）
+        goto wait_eject
+    )
 
     :: ========= 対象拡張子（.DAD含む） =========
     set "FILE_MASKS=*%TARGET_EXT% *.DAD"
 
     :: ========= SharePoint（MOVE） =========
     set "DEST_SP=!SAVE_BASE!\!FOLDER_NAME!!SUB_PATH!"
-    if not exist "!DEST_SP!" mkdir "!DEST_SP!"
-    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /MOVE /R:0 /W:0 > nul
-
-    :: ========= Iドライブ（COPY） =========
-    if exist "I:\id_00.txt" (
-        set "DEST_I=I:\!SYSTEM_DIR!\%YYYYMM%\!FOLDER_NAME!!SUB_PATH!"
-        if not exist "!DEST_I!" mkdir "!DEST_I!"
-        robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /R:0 /W:0 > nul
+    if not exist "!DEST_SP!" mkdir "!DEST_SP!" >nul 2>&1
+    if not exist "!DEST_SP!" (
+        call :log [ERROR][%%D:] SharePoint保存先の作成失敗: !DEST_SP!
+        goto wait_eject
     )
 
-    powershell -command "[System.Console]::Beep(440,500)"
+    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /MOVE /R:0 /W:0 > nul
+    set "RC=!errorlevel!"
+    if !RC! GEQ 8 (
+        call :log [ERROR][%%D:] SharePoint転送失敗 RC=!RC! SRC=!SRC_DIR! DEST=!DEST_SP!
+    ) else (
+        call :log [OK][%%D:] SharePoint転送 RC=!RC! DEST=!DEST_SP!
+    )
+
+    :: ========= Iドライブ（COPY） =========
+    if exist "I:\" if exist "I:\id_00.txt" (
+        set "DEST_I=I:\!SYSTEM_DIR!\%YYYYMM%\!FOLDER_NAME!!SUB_PATH!"
+        if not exist "!DEST_I!" mkdir "!DEST_I!" >nul 2>&1
+        if not exist "!DEST_I!" (
+            call :log [ERROR][%%D:] Iドライブ保存先の作成失敗: !DEST_I!
+        ) else (
+            robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /R:0 /W:0 > nul
+            set "RC=!errorlevel!"
+            if !RC! GEQ 8 (
+                call :log [ERROR][%%D:] Iドライブ転送失敗 RC=!RC! SRC=!SRC_DIR! DEST=!DEST_I!
+            ) else (
+                call :log [OK][%%D:] Iドライブ転送 RC=!RC! DEST=!DEST_I!
+            )
+        )
+    ) else (
+        call :log [INFO] Iドライブ未接続または id_00.txt なし
+    )
+
+    powershell -NoProfile -Command "[console]::beep(440,500)" >nul 2>&1
 
     :wait_eject
     if exist "%%D:\" (
@@ -141,3 +195,9 @@ if exist "%%D:\" (
 ))
 timeout /t 2 > nul
 goto loop
+
+:log
+set "_ts="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"`) do set "_ts=%%i"
+echo [!_ts!] %*>>"%LOGFILE%"
+goto :eof
