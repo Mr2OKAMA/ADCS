@@ -12,7 +12,7 @@ chcp 932 > nul
 :: ==============================
 :: デバッグモード（1=ON, 0=OFF）
 :: ==============================
-set "DEBUG_MODE=1"
+set "DEBUG_MODE=0"
 
 :: ==============================
 :: ログ
@@ -24,9 +24,6 @@ set "LOGFILE=%LOGDIR%\ADCS_%LOGDATE%.log"
 
 call :log ===========================================
 call :log SDカード自動識別システム（共通版） 起動
-if %DEBUG_MODE% EQU 1 (
-    call :log [DEBUG] デバッグモード有効
-)
 
 :: ==============================
 :: 現在年月（YYYYMM）環境非依存
@@ -63,33 +60,6 @@ set "BASE_MSYSTEM=%SP_DOC_ROOT%\03_検針\02_Mシステム"
 set "BASE_FUJI=%SP_DOC_ROOT%\03_検針\03_フジ"
 
 call :log SharePoint：%BASE_ONEDRIVE%
-
-if %DEBUG_MODE% EQU 1 (
-    call :log [DEBUG] 実行ユーザー: %USERNAME%
-    call :log [DEBUG] 実行コンピュータ: %COMPUTERNAME%
-    call :log [DEBUG] SP_DOC_ROOT: %SP_DOC_ROOT%
-    
-    REM OneDrive同期の詳細状態を確認
-    call :log [DEBUG] === OneDrive同期状態の詳細確認 ===
-    powershell -NoProfile -Command "Get-Process OneDrive -ErrorAction SilentlyContinue | Select-Object Name, Handle" >> "!LOGFILE!" 2>&1
-    
-    REM OneDriveフォルダ属性を確認
-    call :log [DEBUG] === OneDriveフォルダ属性 ===
-    attrib "%BASE_ONEDRIVE%" >> "!LOGFILE!" 2>&1
-    
-    REM OneDrive設定ファイルの確認
-    call :log [DEBUG] === OneDrive設定確認 ===
-    dir "%APPDATA%\Microsoft\OneDrive" /S >> "!LOGFILE!" 2>&1
-    
-    REM 実行ユーザーのOneDriveパスを完全に表示
-    call :log [DEBUG] === 環境変数の確認 ===
-    echo OneDrive=%OneDrive%>> "!LOGFILE!" 2>&1
-    echo OneDriveCommercial=%OneDriveCommercial%>> "!LOGFILE!" 2>&1
-    
-    REM ネットワークドライブの確認
-    call :log [DEBUG] === ネットワークドライブ確認 ===
-    net use >> "!LOGFILE!" 2>&1
-)
 
 echo ===========================================
 echo   SDカード自動識別システム（共通版）
@@ -185,21 +155,6 @@ if exist "%%D:\" (
     :: ========= 対象拡張子（.DAD含む） =========
     set "FILE_MASKS=*%TARGET_EXT% *.DAD"
 
-    :: ========= デバッグ情報を記録 =========
-    if %DEBUG_MODE% EQU 1 (
-        call :log [DEBUG][%%D:] フォルダ名: !FOLDER_NAME!
-        call :log [DEBUG][%%D:] システム: !SYSTEM_DIR!
-        call :log [DEBUG][%%D:] 拡張子: !TARGET_EXT!
-        call :log [DEBUG][%%D:] コピー元: !SRC_DIR!
-        call :log [DEBUG][%%D:] コピー先（SharePoint）: !SAVE_BASE!\!FOLDER_NAME!!SUB_PATH!
-        
-        REM コピー元の内容を確認
-        call :log [DEBUG][%%D:] *** コピー元フォルダの内容 ***
-        dir "!SRC_DIR!" !TARGET_EXT! >> "!LOGFILE!" 2>&1
-        call :log [DEBUG][%%D:] *** コピー元フォルダの内容（*.DAD） ***
-        dir "!SRC_DIR!" *.DAD >> "!LOGFILE!" 2>&1
-    )
-
     :: ========= SharePoint（COPY） =========
     set "DEST_SP=!SAVE_BASE!\!FOLDER_NAME!!SUB_PATH!"
     if not exist "!DEST_SP!" mkdir "!DEST_SP!" >nul 2>&1
@@ -208,51 +163,27 @@ if exist "%%D:\" (
         goto wait_eject
     )
 
-    if %DEBUG_MODE% EQU 1 (
-        call :log [DEBUG][%%D:] robocopy実行前：DEST_SP= !DEST_SP!
-        call :log [DEBUG][%%D:] *** コピー先の親フォルダ属性 ***
-        for %%P in ("!DEST_SP!") do (
-            attrib "%%~dpP" >> "!LOGFILE!" 2>&1
-        )
-    )
-
-    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!LOGFILE!" 2>&1
+    :: robocopyを実行（詳細ログを別途ファイルに）
+    set "ROBOCOPY_LOG=%LOGDIR%\ROBOCOPY_%LOGDATE%.log"
+    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!ROBOCOPY_LOG!" 2>&1
     set "RC=!errorlevel!"
     
-    if %DEBUG_MODE% EQU 1 (
-        call :log [DEBUG][%%D:] robocopy リターンコード: !RC!
-        call :log [DEBUG][%%D:] *** robocopy実行直後のコピー先の内容 ***
-        dir "!DEST_SP!" >> "!LOGFILE!" 2>&1
-        
-        call :log [DEBUG][%%D:] *** コピー先のファイル属性 ***
-        attrib "!DEST_SP!" /S >> "!LOGFILE!" 2>&1
-        
-        REM 2秒待機後に再確認（OneDriveの同期を待つ）
-        call :log [DEBUG][%%D:] OneDrive同期待機中...
-        timeout /t 2 > nul
-        call :log [DEBUG][%%D:] *** 2秒後のコピー先の内容（同期確認） ***
-        dir "!DEST_SP!" >> "!LOGFILE!" 2>&1
-    )
-
     if !RC! GEQ 8 (
         call :log [ERROR][%%D:] SharePoint転送失敗 RC=!RC! SRC=!SRC_DIR! DEST=!DEST_SP!
     ) else if !RC! EQU 0 (
         call :log [INFO][%%D:] ファイルなし RC=!RC! DEST=!DEST_SP!
     ) else (
-        call :log [OK][%%D:] SharePoint転送成功 RC=!RC! DEST=!DEST_SP!
+        call :log [OK][%%D:] SharePoint転送成功 DEST=!DEST_SP!
         
-        if %DEBUG_MODE% EQU 1 (
-            REM 実際にファイルが存在するか確認
-            call :log [DEBUG][%%D:] *** ファイル存在確認 ***
-            dir "!DEST_SP!" !TARGET_EXT! >> "!LOGFILE!" 2>&1
-            if !errorlevel! NEQ 0 (
-                call :log [WARNING][%%D:] !TARGET_EXT! ファイルの確認に失敗: !DEST_SP!
-            )
-            dir "!DEST_SP!" *.DAD >> "!LOGFILE!" 2>&1
-            if !errorlevel! NEQ 0 (
-                call :log [WARNING][%%D:] *.DAD ファイルの確認に失敗: !DEST_SP!
-            )
-        )
+        REM OneDrive同期を待つ（最大10秒）
+        set "WAIT_COUNT=0"
+        :sync_wait
+        if !WAIT_COUNT! GEQ 10 goto sync_done
+        timeout /t 1 > nul
+        set /a WAIT_COUNT+=1
+        goto sync_wait
+        
+        :sync_done
     )
 
     :: ========= Iドライブ（COPY） =========
@@ -262,37 +193,15 @@ if exist "%%D:\" (
         if not exist "!DEST_I!" (
             call :log [ERROR][%%D:] Iドライブ保存先の作成失敗: !DEST_I!
         ) else (
-            if %DEBUG_MODE% EQU 1 (
-                call :log [DEBUG][%%D:] robocopy実行前（Iドライブ）：DEST_I= !DEST_I!
-            )
-
-            robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!LOGFILE!" 2>&1
+            robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!ROBOCOPY_LOG!" 2>&1
             set "RC=!errorlevel!"
             
-            if %DEBUG_MODE% EQU 1 (
-                call :log [DEBUG][%%D:] robocopy リターンコード（Iドライブ）: !RC!
-                call :log [DEBUG][%%D:] *** robocopy実行後のIドライブの内容 ***
-                dir "!DEST_I!" >> "!LOGFILE!" 2>&1
-            )
-
             if !RC! GEQ 8 (
                 call :log [ERROR][%%D:] Iドライブ転送失敗 RC=!RC! SRC=!SRC_DIR! DEST=!DEST_I!
             ) else if !RC! EQU 0 (
                 call :log [INFO][%%D:] Iドライブ ファイルなし RC=!RC! DEST=!DEST_I!
             ) else (
-                call :log [OK][%%D:] Iドライブ転送成功 RC=!RC! DEST=!DEST_I!
-                
-                if %DEBUG_MODE% EQU 1 (
-                    call :log [DEBUG][%%D:] *** Iドライブ ファイル存在確認 ***
-                    dir "!DEST_I!" !TARGET_EXT! >> "!LOGFILE!" 2>&1
-                    if !errorlevel! NEQ 0 (
-                        call :log [WARNING][%%D:] !TARGET_EXT! ファイルの確認に失敗: !DEST_I!
-                    )
-                    dir "!DEST_I!" *.DAD >> "!LOGFILE!" 2>&1
-                    if !errorlevel! NEQ 0 (
-                        call :log [WARNING][%%D:] *.DAD ファイルの確認に失敗: !DEST_I!
-                    )
-                )
+                call :log [OK][%%D:] Iドライブ転送成功 DEST=!DEST_I!
             )
         )
     ) else (
