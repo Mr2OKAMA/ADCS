@@ -1,214 +1,493 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-:: ==============================
-:: å®Ÿè¡Œä¸­ã‚¿ã‚¤ãƒˆãƒ«è¡¨ç¤º
-:: ==============================
-title ã€å®Ÿè¡Œä¸­ã€‘SDã‚«ãƒ¼ãƒ‰è‡ªå‹•è­˜åˆ¥ã‚·ã‚¹ãƒ†ãƒ 
-
-:: æ—¥æœ¬èªžç’°å¢ƒ
+title yŽÀs’†zSDƒJ[ƒhŽ©“®Ž¯•ÊƒVƒXƒeƒ€
 chcp 932 > nul
 
-:: ==============================
-:: ãƒ­ã‚°
-:: ==============================
+REM ==============================
+REM Ý’èiŒ»ê‚É‡‚í‚¹‚Ä•ÏXj
+REM ==============================
+REM SDƒJ[ƒh‚ðŠÄŽ‹‚·‚éƒhƒ‰ƒCƒu•¶ŽšiIƒhƒ‰ƒCƒu“™‚ÌƒoƒbƒNƒAƒbƒvæ‚ÍŠÜ‚ß‚È‚¢j
+set "SCAN_DRIVES=E F G H J K L M N"
+set "BACKUP_DRIVE=I"
+set "LOG_KEEP_DAYS=90"
+
+REM ŒŸo‚ÉŽ¸”s‚·‚é“ÁŽê‚ÈŠÂ‹«Œü‚¯‚ÌŽè“®Žw’èi03_ŒŸj ‚ÌeƒtƒHƒ‹ƒ_‚ðÝ’èj
+REM —á: set "ADCS_ROOT=D:\OneDrive - ‰ïŽÐ–¼\02_“_ŒŸA‹L˜^"
+
+REM ƒNƒCƒbƒN•ÒWƒ‚[ƒh–³Œø‰»iƒRƒ“ƒ\[ƒ‹‚ÌƒNƒŠƒbƒN‚Å’âŽ~‚·‚é‚Ì‚ð–h‚®BŽŸ‰ñ‹N“®‚ÌƒRƒ“ƒ\[ƒ‹‚©‚ç—LŒøj
+reg add "HKCU\Console" /v QuickEdit /t REG_DWORD /d 0 /f >nul 2>&1
+
+REM ==============================
+REM ƒƒO
+REM ==============================
 set "LOGDIR=%~dp0logs"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%" >nul 2>&1
-for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "LOGDATE=%%i"
-set "LOGFILE=%LOGDIR%\ADCS_%LOGDATE%.log"
+
+call :refresh_date
+if errorlevel 1 (
+    echo [ERROR] “ú•t‚ÌŽæ“¾‚ÉŽ¸”s‚µ‚Ü‚µ‚½B
+    pause
+    exit /b 1
+)
+
+forfiles /p "%LOGDIR%" /m *.log /d -%LOG_KEEP_DAYS% /c "cmd /c del @path" >nul 2>&1
 
 call :log ===========================================
-call :log SDã‚«ãƒ¼ãƒ‰è‡ªå‹•è­˜åˆ¥ã‚·ã‚¹ãƒ†ãƒ ï¼ˆå…±é€šç‰ˆï¼‰ èµ·å‹•
+call :log SDƒJ[ƒhŽ©“®Ž¯•ÊƒVƒXƒeƒ€i‹¤’Ê”Åj ‹N“®
+call :log [INFO] USERPROFILE=%USERPROFILE%
+call :log [INFO] OneDriveCommercial=%OneDriveCommercial%
+call :log [INFO] OneDrive=%OneDrive%
 
-:: ==============================
-:: ç¾åœ¨å¹´æœˆï¼ˆYYYYMMï¼‰ç’°å¢ƒéžä¾å­˜
-:: ==============================
-for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMM"') do set "YYYYMM=%%i"
-if not defined YYYYMM (
-    call :log [ERROR] YYYYMM ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
-    echo [ERROR] YYYYMM ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
+REM ==============================
+REM SharePoint•Û‘¶æŽ©“®”»’è
+REM %USERPROFILE%’¼‰ºiƒ‰ƒCƒuƒ‰ƒŠ“¯Šúj‚Æ
+REM %OneDriveCommercial%”z‰ºiOneDrive‚Ö‚ÌƒVƒ‡[ƒgƒJƒbƒg’Ç‰Áj‚Ì—¼‘Î‰ž
+REM ==============================
+echo SharePoint•Û‘¶æ‚ðŒŸõ‚µ‚Ä‚¢‚Ü‚·...
+set "TRY=0"
+
+:detect
+set "SP_DOC_ROOT="
+set "SP_DOC_PARTIAL="
+set "SP_DOC_MISSING="
+set "BASE_N=0"
+call :collect_bases
+
+REM --- ‘æ1’iŠKFŠù’m‚ÌŠK‘wƒpƒ^[ƒ“‚Å‚‘¬”»’è ---
+for /l %%I in (1,1,!BASE_N!) do if not defined SP_DOC_ROOT call :try_root "!BASE_%%I!"
+
+REM --- ‘æ2’iŠKF03_ŒŸj ‚ðÄ‹AŒŸõi•‰‰×ŒyŒ¸‚Ì‚½‚ß10‰ñ‚É1‰ñj ---
+set /a "DEEPNOW=TRY %% 10"
+if not defined SP_DOC_ROOT if !DEEPNOW! EQU 0 (
+    for /l %%I in (1,1,!BASE_N!) do if not defined SP_DOC_ROOT if "!BASE_DEEP_%%I!"=="1" call :deep_root "!BASE_%%I!"
+)
+
+if not defined SP_DOC_ROOT (
+    set /a TRY+=1
+    if !TRY! LSS 60 (
+        ping -n 6 127.0.0.1 >nul
+        goto detect
+    )
+)
+
+if not defined SP_DOC_ROOT (
+    call :log [ERROR] SharePoint•Û‘¶æ‚ÌŒŸo‚ÉŽ¸”s‚µ‚Ü‚µ‚½
+    for /l %%I in (1,1,!BASE_N!) do call :log [INFO] ŒŸõ‚µ‚½êŠ !BASE_%%I!
+    echo.
+    echo [ERROR]
+    if defined SP_DOC_PARTIAL (
+        call :log [ERROR] •”•ª“¯Šú‚Ì‰Â”\« ROOT=!SP_DOC_PARTIAL! •s‘«=!SP_DOC_MISSING!
+        echo ŒŸjƒtƒHƒ‹ƒ_‚ÍŒ©‚Â‚©‚è‚Ü‚µ‚½‚ªAŽŸ‚ÌŒn“ƒtƒHƒ‹ƒ_‚ªƒ[ƒJƒ‹‚É‚ ‚è‚Ü‚¹‚ñB
+        echo   êŠF!SP_DOC_PARTIAL!\03_ŒŸj
+        echo   •s‘«F!SP_DOC_MISSING!
+        echo.
+        echo OneDriveÝ’è „ ƒAƒJƒEƒ“ƒg „ ƒtƒHƒ‹ƒ_[‚Ì‘I‘ð ‚Å
+        echo ã‹LƒtƒHƒ‹ƒ_‚Ìƒ`ƒFƒbƒN‚ªŠO‚ê‚Ä‚¢‚È‚¢‚©Šm”F‚µ‚Ä‚­‚¾‚³‚¢B
+        echo ƒ`ƒFƒbƒN‚ª“ü‚Á‚Ä‚¢‚éê‡‚Í SharePoint ‘¤‚ÌƒAƒNƒZƒXŒ ‚ðŠm”F‚µ‚Ä‚­‚¾‚³‚¢B
+    ) else (
+        echo SharePoint•Û‘¶æ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñBOneDrive‚ÉƒTƒCƒ“ƒCƒ“ŒãA
+        echo ˆÈ‰º‚Ì‚¢‚¸‚ê‚©‚ðOneDrive‚Ö’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢B
+        echo.
+        echo SAM_’†•”ƒ`[ƒ€ - ƒhƒLƒ…ƒƒ“ƒgiƒ‰ƒCƒuƒ‰ƒŠ“¯Šúj
+        echo B01_–Ø‘]ì‰EŠÝŠÇ—Ž––±Š
+        echo 5215–Ø‘]ì‰EŠÝyŒ_–ñ‹Æ–±z
+        echo 104.‰^“]E‰^—p‹L˜^
+        echo 02_“_ŒŸA‹L˜^
+        echo 03_ŒŸj
+        echo.
+        echo ŒŸõ‚µ‚½êŠ‚ÍƒƒO‚É‹L˜^‚µ‚Ä‚¢‚Ü‚·B
+        echo ƒƒOF!LOGFILE!
+    )
+    echo.
     pause
     exit /b 1
 )
 
-:: ==============================
-:: OneDriveï¼ˆSharePointï¼‰ãƒ«ãƒ¼ãƒˆè‡ªå‹•æ¤œå‡º
-:: ==============================
-set "BASE_ONEDRIVE="
-if defined OneDriveCommercial set "BASE_ONEDRIVE=%OneDriveCommercial%"
-if not defined BASE_ONEDRIVE if defined OneDrive set "BASE_ONEDRIVE=%OneDrive%"
+for %%F in ("!SP_DOC_ROOT!\.") do set "SP_DOC_ROOT=%%~fF"
 
-if not defined BASE_ONEDRIVE (
-    call :log [ERROR] OneDrive ã®æ¥­å‹™ç”¨ãƒ‘ã‚¹ã‚’å–å¾—ã§ãã¾ã›ã‚“ã§ã—ãŸã€‚
-    echo [ERROR] OneDrive ã®ãƒ‘ã‚¹ãŒå–å¾—ã§ãã¾ã›ã‚“ã€‚
-    echo OneDrive ã«ã‚µã‚¤ãƒ³ã‚¤ãƒ³å¾Œã€å†å®Ÿè¡Œã—ã¦ãã ã•ã„ã€‚
+set "KENSHIN_ROOT=!SP_DOC_ROOT!\03_ŒŸj"
+
+for %%N in (01_‰¡‰Í 02_MƒVƒXƒeƒ€ 03_ƒtƒW) do if not exist "!KENSHIN_ROOT!\%%N\" (
+    call :log [ERROR] %%N ƒtƒHƒ‹ƒ_‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ ROOT=!KENSHIN_ROOT!
+    echo [ERROR] %%N ƒtƒHƒ‹ƒ_‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ
+    echo êŠF!KENSHIN_ROOT!
     pause
     exit /b 1
 )
 
-:: ==============================
-:: SharePoint ä¿å­˜å…ˆãƒ™ãƒ¼ã‚¹
-:: ==============================
-set "SP_DOC_ROOT=%BASE_ONEDRIVE%\SAM_ä¸­éƒ¨ãƒãƒ¼ãƒ  - ãƒ‰ã‚­ãƒ¥ãƒ¡ãƒ³ãƒˆ\B01_æœ¨æ›½å·å³å²¸ç®¡ç†äº‹å‹™æ‰€\5215æœ¨æ›½å·å³å²¸ã€å¥‘ç´„æ¥­å‹™ã€‘\104.é‹è»¢ãƒ»é‹ç”¨è¨˜éŒ²\02_ç‚¹æ¤œã€è¨˜éŒ²"
-set "BASE_YOKOGAWA=%SP_DOC_ROOT%\03_æ¤œé‡\01_æ¨ªæ²³"
-set "BASE_MSYSTEM=%SP_DOC_ROOT%\03_æ¤œé‡\02_Mã‚·ã‚¹ãƒ†ãƒ "
-set "BASE_FUJI=%SP_DOC_ROOT%\03_æ¤œé‡\03_ãƒ•ã‚¸"
+set "BASE_YOKOGAWA=!KENSHIN_ROOT!\01_‰¡‰Í"
+set "BASE_MSYSTEM=!KENSHIN_ROOT!\02_MƒVƒXƒeƒ€"
+set "BASE_FUJI=!KENSHIN_ROOT!\03_ƒtƒW"
 
-call :log SharePointï¼š%BASE_ONEDRIVE%
+call :log ŒŸjƒ‹[ƒg=!KENSHIN_ROOT!
 
 echo ===========================================
-echo   SDã‚«ãƒ¼ãƒ‰è‡ªå‹•è­˜åˆ¥ã‚·ã‚¹ãƒ†ãƒ ï¼ˆå…±é€šç‰ˆï¼‰
+echo   SDƒJ[ƒhŽ©“®Ž¯•ÊƒVƒXƒeƒ€i‹¤’Ê”Åj
 echo ===========================================
-echo çŠ¶æ…‹ï¼šå®Ÿè¡Œä¸­
-echo SharePointï¼š%BASE_ONEDRIVE%
-echo Iãƒ‰ãƒ©ã‚¤ãƒ–ï¼šid_00.txt ãŒã‚ã‚‹å ´åˆã®ã¿ã‚³ãƒ”ãƒ¼
-echo å¯¾è±¡ãƒ•ã‚©ãƒ«ãƒ€ï¼šDATA0 / 71VR / S000000
-echo ãƒ­ã‚°ï¼š%LOGFILE%
-echo â€» çµ‚äº†ï¼šCtrl + C
+echo ó‘ÔFŽÀs’†
+echo ŒŸjƒ‹[ƒgF!KENSHIN_ROOT!
+echo ŠÄŽ‹ƒhƒ‰ƒCƒuF%SCAN_DRIVES%
+echo ƒoƒbƒNƒAƒbƒvF%BACKUP_DRIVE%ƒhƒ‰ƒCƒuiid_00.txt ‚ª‚ ‚éê‡‚Ì‚ÝƒRƒs[j
+echo ‘ÎÛƒtƒHƒ‹ƒ_FDATA0 / 71VR / S000000
+echo ƒƒOF!LOGFILE!
+echo ¦ I—¹FCtrl + C
+echo ¦ ƒGƒ‰[‰¹‚ª–Â‚Á‚½ê‡‚ÍƒJ[ƒh‚ð”²‚©‚¸‚É‰æ–Ê‚ðŠm”F‚µ‚Ä‚­‚¾‚³‚¢
 echo ===========================================
 echo.
 
 :loop
-for %%D in (D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
-if exist "%%D:\" (
+for %%D in (%SCAN_DRIVES%) do call :process_drive %%D
+ping -n 3 127.0.0.1 >nul
+goto loop
 
-    call :log [%%D: æ¤œå‡º] åˆ¤å®šä¸­...
 
-    set "FOLDER_NAME="
-    set "SAVE_BASE="
-    set "SUB_PATH="
-    set "SYSTEM_DIR="
-    set "TARGET_EXT="
-    set "SPECIAL_ID=0"
+REM ==============================
+REM ƒhƒ‰ƒCƒu’PˆÊ‚Ìˆ—
+REM ==============================
+:process_drive
+set "DRV=%~1"
+if /i "%DRV%"=="%BACKUP_DRIVE%" exit /b
 
-    :: ========= Mã‚·ã‚¹ãƒ†ãƒ  =========
-    if exist "%%D:\id_21.txt" (
-        set "FOLDER_NAME=01_å…¼å±±ãƒãƒ³ãƒ—å ´"
-        set "SAVE_BASE=%BASE_MSYSTEM%\%YYYYMM%"
-        set "SUB_PATH=\01_åˆæœŸãƒ‡ãƒ¼ã‚¿"
-        set "SYSTEM_DIR=02_Mã‚·ã‚¹ãƒ†ãƒ "
-        set "TARGET_EXT=.71VR"
-        set "SPECIAL_ID=1"
+REM ƒJ[ƒh‚ª–³‚¢ˆ—Ï‚ÝE’Ê’mÏ‚Ýƒtƒ‰ƒO‚ðƒNƒŠƒA
+if not exist "%DRV%:\" (
+    set "DONE_%DRV%="
+    set "NOTE_%DRV%="
+    set "TRIES_%DRV%="
+    exit /b
+)
+if defined DONE_%DRV% exit /b
+
+REM ========= ƒRƒs[Œ³ƒtƒHƒ‹ƒ_Ž©“®”»’è =========
+set "SRC_DIR="
+if exist "%DRV%:\DATA0" (
+    set "SRC_DIR=%DRV%:\DATA0"
+) else if exist "%DRV%:\71VR" (
+    set "SRC_DIR=%DRV%:\71VR"
+) else if exist "%DRV%:\S000000" (
+    set "SRC_DIR=%DRV%:\S000000"
+)
+
+if not defined SRC_DIR (
+    if not defined NOTE_%DRV% (
+        set "NOTE_%DRV%=1"
+        call :log [%DRV%:] ‘ÎÛƒtƒHƒ‹ƒ_‚È‚µ DATA0/71VR/S000000
     )
-    if exist "%%D:\id_22.txt" (
-        set "FOLDER_NAME=02_å·å³¶ãƒãƒ³ãƒ—å ´"
-        set "SAVE_BASE=%BASE_MSYSTEM%\%YYYYMM%"
-        set "SUB_PATH=\01_åˆæœŸãƒ‡ãƒ¼ã‚¿"
-        set "SYSTEM_DIR=02_Mã‚·ã‚¹ãƒ†ãƒ "
-        set "TARGET_EXT=.71VR"
-        set "SPECIAL_ID=1"
+    exit /b
+)
+
+REM ========= ”NŒŽEƒƒO“ú•t‚ðÅV‰» =========
+call :refresh_date
+if errorlevel 1 (
+    set "DONE_%DRV%=1"
+    call :alert_error "[%DRV%:] “ú•t‚ÌŽæ“¾‚ÉŽ¸”s‚µ‚Ü‚µ‚½BƒRƒs[‚ð’†Ž~‚µ‚Ü‚µ‚½"
+    exit /b
+)
+set "ROBOCOPY_LOG=%LOGDIR%\ROBOCOPY_!LOGDATE!.log"
+
+call :log [%DRV%: ŒŸo] ”»’è’†...
+
+REM ========= Ý”õ”»’èi•\Œ`Ž®B•¡”ID‚ÍƒGƒ‰[j =========
+set "ID_COUNT=0"
+set "SYS_CODE="
+set "FOLDER_NAME="
+set "SUB_PATH="
+set "TARGET_EXT="
+set "SYS_ROOT="
+set "SYSTEM_DIR="
+set "SAVE_BASE="
+
+REM ‘Ž®: "ID”Ô†|Œn“(Y=‰¡‰Í,M=MƒVƒXƒeƒ€,F=ƒtƒW)|ƒtƒHƒ‹ƒ_–¼"
+for %%T in (
+    "01|Y|01_‰º‰HŒI"
+    "02|Y|02_ŠHŒ©"
+    "03|Y|03_Šò“ì¼"
+    "04|Y|04_ì“‡‘æ“ñ"
+    "05|Y|05_’·Xƒ|ƒ“ƒvê"
+    "06|Y|06_•Ä–ì"
+    "07|Y|07_“Œ•”‘æˆê"
+    "08|Y|08_“Œ•”‘æ“ñ"
+    "09|Y|09_”~¼"
+    "11|Y|11_[“cAŽð‘q"
+    "12|Y|12_ì•Ó"
+    "13|Y|13_’†Œb“y"
+    "14|Y|14_”ª•S’Ã"
+    "15|Y|15_—Î‰‘"
+    "16|Y|16_˜a’m"
+    "21|M|01_Œ“ŽRƒ|ƒ“ƒvê"
+    "22|M|02_ì“‡ƒ|ƒ“ƒvê"
+    "31|F|01_Šò“ìƒ|ƒ“ƒvê"
+) do for /f "tokens=1-3 delims=|" %%a in (%%T) do (
+    if exist "%DRV%:\id_%%a.txt" (
+        set /a ID_COUNT+=1
+        set "SYS_CODE=%%b"
+        set "FOLDER_NAME=%%c"
     )
+)
 
-    :: ========= ãƒ•ã‚¸ =========
-    if "!SPECIAL_ID!"=="0" if exist "%%D:\id_31.txt" (
-        set "FOLDER_NAME=01_å²å—ãƒãƒ³ãƒ—å ´"
-        set "SAVE_BASE=%BASE_FUJI%\%YYYYMM%"
-        set "SYSTEM_DIR=03_ãƒ•ã‚¸"
-        set "TARGET_EXT=.FDT"
-        set "SPECIAL_ID=1"
-    )
+if !ID_COUNT! GTR 1 (
+    set "DONE_%DRV%=1"
+    call :alert_error "[%DRV%:] IDƒtƒ@ƒCƒ‹‚ª•¡”‚ ‚è‚Ü‚·BƒRƒs[‚ð’†Ž~‚µ‚Ü‚µ‚½"
+    exit /b
+)
+if !ID_COUNT! EQU 0 (
+    set "SYS_CODE=Y"
+    set "FOLDER_NAME=–¢Ž¯•ÊƒJ[ƒh"
+)
 
-    :: ========= æ¨ªæ²³ =========
-    if "!SPECIAL_ID!"=="0" (
-        if exist "%%D:\id_01.txt" set "FOLDER_NAME=01_ä¸‹ç¾½æ —"
-        if exist "%%D:\id_02.txt" set "FOLDER_NAME=02_èŠ¥è¦‹"
-        if exist "%%D:\id_03.txt" set "FOLDER_NAME=03_å²å—è¥¿"
-        if exist "%%D:\id_04.txt" set "FOLDER_NAME=04_å·å³¶ç¬¬äºŒ"
-        if exist "%%D:\id_05.txt" set "FOLDER_NAME=05_é•·æ£®ãƒãƒ³ãƒ—å ´"
-        if exist "%%D:\id_06.txt" set "FOLDER_NAME=06_ç±³é‡Ž"
-        if exist "%%D:\id_07.txt" set "FOLDER_NAME=07_æ±éƒ¨ç¬¬ä¸€"
-        if exist "%%D:\id_08.txt" set "FOLDER_NAME=08_æ±éƒ¨ç¬¬äºŒ"
-        if exist "%%D:\id_09.txt" set "FOLDER_NAME=09_æ¢…æ¾"
-        if exist "%%D:\id_11.txt" set "FOLDER_NAME=11_æ·±ç”°ã€é…’å€‰"
-        if exist "%%D:\id_12.txt" set "FOLDER_NAME=12_å·è¾º"
-        if exist "%%D:\id_13.txt" set "FOLDER_NAME=13_ä¸­æµåœŸ"
-        if exist "%%D:\id_14.txt" set "FOLDER_NAME=14_å…«ç™¾æ´¥"
-        if exist "%%D:\id_15.txt" set "FOLDER_NAME=15_ç·‘è‹‘"
-        if exist "%%D:\id_16.txt" set "FOLDER_NAME=16_å’ŒçŸ¥"
+if "!SYS_CODE!"=="Y" set "SYS_ROOT=!BASE_YOKOGAWA!" & set "SYSTEM_DIR=01_‰¡‰Í" & set "TARGET_EXT=.GDS"
+if "!SYS_CODE!"=="M" set "SYS_ROOT=!BASE_MSYSTEM!" & set "SYSTEM_DIR=02_MƒVƒXƒeƒ€" & set "TARGET_EXT=.71VR" & set "SUB_PATH=\01_‰Šúƒf[ƒ^"
+if "!SYS_CODE!"=="F" set "SYS_ROOT=!BASE_FUJI!" & set "SYSTEM_DIR=03_ƒtƒW" & set "TARGET_EXT=.FDT"
 
-        if "!FOLDER_NAME!"=="" set "FOLDER_NAME=æœªè­˜åˆ¥ã‚«ãƒ¼ãƒ‰"
-        set "SAVE_BASE=%BASE_YOKOGAWA%\%YYYYMM%"
-        set "SYSTEM_DIR=01_æ¨ªæ²³"
-        set "TARGET_EXT=.GDS"
-    )
+if not defined TARGET_EXT (
+    set "DONE_%DRV%=1"
+    call :alert_error "[%DRV%:] ‘ÎÛŠg’£Žq‚ðŒˆ’è‚Å‚«‚Ü‚¹‚ñBƒRƒs[‚ð’†Ž~‚µ‚Ü‚µ‚½"
+    exit /b
+)
 
-    :: ========= ã‚³ãƒ”ãƒ¼å…ƒãƒ•ã‚©ãƒ«ãƒ€è‡ªå‹•åˆ¤å®š =========
-    set "SRC_DIR="
-    if exist "%%D:\DATA0" (
-        set "SRC_DIR=%%D:\DATA0"
-    ) else if exist "%%D:\71VR" (
-        set "SRC_DIR=%%D:\71VR"
-    ) else if exist "%%D:\S000000" (
-        set "SRC_DIR=%%D:\S000000"
-    )
+set "SAVE_BASE=!SYS_ROOT!\!YYYYMM!"
+set "FILE_MASKS=*!TARGET_EXT! *.DAD"
 
-    if "!SRC_DIR!"=="" (
-        call :log [%%D:] å¯¾è±¡ãƒ•ã‚©ãƒ«ãƒ€ãªã—ï¼ˆDATA0/71VR/S000000ï¼‰
-        goto wait_eject
-    )
+call :log [%DRV%:] Ý”õ=!FOLDER_NAME! Œn“=!SYS_CODE! ƒ}ƒXƒN=!FILE_MASKS!
 
-    :: ========= å¯¾è±¡æ‹¡å¼µå­ï¼ˆ.DADå«ã‚€ï¼‰ =========
-    set "FILE_MASKS=*%TARGET_EXT% *.DAD"
+set "SP_OK=0"
+set "I_STATE=SKIP"
+set "ONEDRIVE_DOWN="
 
-    :: ========= SharePointï¼ˆCOPYï¼‰ =========
+REM ========= OneDrive‰Ò“­Šm”F =========
+tasklist /fi "imagename eq OneDrive.exe" 2>nul | find /i "OneDrive.exe" >nul
+if errorlevel 1 set "ONEDRIVE_DOWN=1"
+
+REM ========= SharePointiOneDrive“¯ŠúƒtƒHƒ‹ƒ_‚ÖCOPYj =========
+if not exist "!SYS_ROOT!" (
+    call :log [ERROR][%DRV%:] •Û‘¶æ‚ÌŒn“ƒtƒHƒ‹ƒ_‚ª‚ ‚è‚Ü‚¹‚ñ “¯Šú‰ðœ‚Ì‰Â”\« !SYS_ROOT!
+) else (
     set "DEST_SP=!SAVE_BASE!\!FOLDER_NAME!!SUB_PATH!"
     if not exist "!DEST_SP!" mkdir "!DEST_SP!" >nul 2>&1
     if not exist "!DEST_SP!" (
-        call :log [ERROR][%%D:] SharePointä¿å­˜å…ˆã®ä½œæˆå¤±æ•—: !DEST_SP!
-        goto wait_eject
-    )
-
-    :: robocopyã‚’å®Ÿè¡Œ
-    set "ROBOCOPY_LOG=%LOGDIR%\ROBOCOPY_%LOGDATE%.log"
-    robocopy "!SRC_DIR!" "!DEST_SP!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!ROBOCOPY_LOG!" 2>&1
-    set "RC=!errorlevel!"
-    
-    if !RC! GEQ 8 (
-        call :log [ERROR][%%D:] SharePointè»¢é€å¤±æ•— RC=!RC! SRC=!SRC_DIR! DEST=!DEST_SP!
-    ) else if !RC! EQU 0 (
-        call :log [INFO][%%D:] ãƒ•ã‚¡ã‚¤ãƒ«ãªã— RC=!RC! DEST=!DEST_SP!
+        call :log [ERROR][%DRV%:] •Û‘¶æ‚Ìì¬Ž¸”s !DEST_SP!
     ) else (
-        call :log [OK][%%D:] SharePointè»¢é€æˆåŠŸ DEST=!DEST_SP!
-        
-        REM OneDriveåŒæœŸã‚’å¾…ã¤ï¼ˆæœ€å¤§5ç§’ï¼‰
-        timeout /t 5 > nul
-    )
-
-    :: ========= Iãƒ‰ãƒ©ã‚¤ãƒ–ï¼ˆCOPYï¼‰ =========
-    if exist "I:\" if exist "I:\id_00.txt" (
-        set "DEST_I=I:\!SYSTEM_DIR!\%YYYYMM%\!FOLDER_NAME!!SUB_PATH!"
-        if not exist "!DEST_I!" mkdir "!DEST_I!" >nul 2>&1
-        if not exist "!DEST_I!" (
-            call :log [ERROR][%%D:] Iãƒ‰ãƒ©ã‚¤ãƒ–ä¿å­˜å…ˆã®ä½œæˆå¤±æ•—: !DEST_I!
+        call :do_copy "!SRC_DIR!" "!DEST_SP!"
+        if "!COPY_RESULT!"=="COPIED" (
+            set "SP_OK=1"
+            call :log [OK][%DRV%:] OneDrive“¯ŠúƒtƒHƒ‹ƒ_‚ÖƒRƒs[Š®—¹ DEST=!DEST_SP!
+        ) else if "!COPY_RESULT!"=="NOCHANGE" (
+            set "SP_OK=1"
+            call :log [INFO][%DRV%:] V‹KƒRƒs[‚È‚µ ŠY“–ƒtƒ@ƒCƒ‹‚È‚µ‚Ü‚½‚ÍƒRƒs[Ï‚Ý DEST=!DEST_SP!
         ) else (
-            robocopy "!SRC_DIR!" "!DEST_I!" %FILE_MASKS% /S /COPY:DAT /R:0 /W:0 >> "!ROBOCOPY_LOG!" 2>&1
-            set "RC=!errorlevel!"
-            
-            if !RC! GEQ 8 (
-                call :log [ERROR][%%D:] Iãƒ‰ãƒ©ã‚¤ãƒ–è»¢é€å¤±æ•— RC=!RC! SRC=!SRC_DIR! DEST=!DEST_I!
-            ) else if !RC! EQU 0 (
-                call :log [INFO][%%D:] Iãƒ‰ãƒ©ã‚¤ãƒ– ãƒ•ã‚¡ã‚¤ãƒ«ãªã— RC=!RC! DEST=!DEST_I!
-            ) else (
-                call :log [OK][%%D:] Iãƒ‰ãƒ©ã‚¤ãƒ–è»¢é€æˆåŠŸ DEST=!DEST_I!
-            )
+            call :log [ERROR][%DRV%:] “]‘—Ž¸”s RC=!RC! RC2=!RC2! SRC=!SRC_DIR! DEST=!DEST_SP!
         )
+    )
+)
+
+REM ========= ƒoƒbƒNƒAƒbƒvƒhƒ‰ƒCƒuiCOPYj =========
+if exist "%BACKUP_DRIVE%:\id_00.txt" (
+    set "DEST_I=%BACKUP_DRIVE%:\!SYSTEM_DIR!\!YYYYMM!\!FOLDER_NAME!!SUB_PATH!"
+    if not exist "!DEST_I!" mkdir "!DEST_I!" >nul 2>&1
+    if not exist "!DEST_I!" (
+        set "I_STATE=NG"
+        call :log [ERROR][%DRV%:] ƒoƒbƒNƒAƒbƒv•Û‘¶æ‚Ìì¬Ž¸”s !DEST_I!
     ) else (
-        call :log [INFO] Iãƒ‰ãƒ©ã‚¤ãƒ–æœªæŽ¥ç¶šã¾ãŸã¯ id_00.txt ãªã—
+        call :do_copy "!SRC_DIR!" "!DEST_I!"
+        if "!COPY_RESULT!"=="NG" (
+            set "I_STATE=NG"
+            call :log [ERROR][%DRV%:] ƒoƒbƒNƒAƒbƒv“]‘—Ž¸”s RC=!RC! RC2=!RC2! DEST=!DEST_I!
+        ) else (
+            set "I_STATE=OK"
+            call :log [OK][%DRV%:] ƒoƒbƒNƒAƒbƒv“]‘—¬Œ÷ !COPY_RESULT! DEST=!DEST_I!
+        )
     )
+) else (
+    call :log [INFO] ƒoƒbƒNƒAƒbƒvƒhƒ‰ƒCƒu–¢Ú‘±‚Ü‚½‚Í id_00.txt ‚È‚µ
+)
 
+REM ========= Œ‹‰Ê”»’è =========
+set "ALL_OK=1"
+if not "!SP_OK!"=="1" set "ALL_OK=0"
+if "!I_STATE!"=="NG" set "ALL_OK=0"
+
+if "!ALL_OK!"=="1" (
+    set "DONE_%DRV%=1"
+    call :log [%DRV%:] ˆ—Š®—¹ ƒJ[ƒh‚ðŽæ‚èŠO‚¹‚Ü‚·
     powershell -NoProfile -Command "[console]::beep(440,500)" >nul 2>&1
-
-    :wait_eject
-    if exist "%%D:\" (
-        timeout /t 1 > nul
-        goto wait_eject
+    if defined ONEDRIVE_DOWN call :alert_error "OneDrive‚ª‹N“®‚µ‚Ä‚¢‚Ü‚¹‚ñBƒRƒs[‚Í“¯Šú‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ"
+) else (
+    set /a "TRIES_%DRV%+=1"
+    for %%V in (TRIES_%DRV%) do set "TRY_NOW=!%%V!"
+    call :alert_error "[%DRV%:] ƒRƒs[Ž¸”s ƒJ[ƒh‚ð”²‚©‚¸‚ÉŠÇ—ŽÒ‚Ö˜A—‚µ‚Ä‚­‚¾‚³‚¢ ŽŽs=!TRY_NOW!/3"
+    if !TRY_NOW! GEQ 3 (
+        set "DONE_%DRV%=1"
+        call :log [ERROR][%DRV%:] ƒŠƒgƒ‰ƒCãŒÀ Ä‘}“ü‚ÅÄŽÀs‚µ‚Ü‚·
+    ) else (
+        ping -n 6 127.0.0.1 >nul
     )
-))
-timeout /t 2 > nul
-goto loop
+)
+exit /b
 
+
+REM ==============================
+REM robocopy{ŒŸØi%1=ƒRƒs[Œ³ %2=ƒRƒs[æ ¨ COPY_RESULT=COPIED/NOCHANGE/NGj
+REM ==============================
+:do_copy
+set "COPY_RESULT=NG"
+set "RC=" & set "RC2="
+robocopy %1 %2 !FILE_MASKS! /S /COPY:DT /DCOPY:T /FFT /R:2 /W:3 /NP /NDL >> "!ROBOCOPY_LOG!" 2>&1
+set "RC=!errorlevel!"
+if !RC! GEQ 8 exit /b
+set /a "COPIED=RC & 1"
+
+REM ŒŸØF‚Ü‚¾ƒRƒs[‚ª•K—v‚Èƒtƒ@ƒCƒ‹‚ª–³‚¢‚±‚ÆiRC 1/4/8 ‚ª—§‚½‚È‚¢j
+robocopy %1 %2 !FILE_MASKS! /S /L /FFT /NJH /NJS /NP /NDL /NFL >nul 2>&1
+set "RC2=!errorlevel!"
+set /a "VNG=RC2 & 13"
+if !VNG! NEQ 0 exit /b
+
+if !COPIED! EQU 1 (
+    set "COPY_RESULT=COPIED"
+) else (
+    set "COPY_RESULT=NOCHANGE"
+)
+exit /b
+
+
+REM ==============================
+REM ’Tõ‚Ì‹N“_Œó•â‚ðŽûW
+REM ==============================
+:collect_bases
+REM Žè“®Žw’èiÅ—Dæj
+if defined ADCS_ROOT call :add_base "%ADCS_ROOT%" 1
+
+REM OneDrive‚Ö‚ÌƒVƒ‡[ƒgƒJƒbƒg’Ç‰Á‚É‘Î‰ž
+call :add_base "%OneDriveCommercial%" 1
+call :add_base "%OneDrive%" 1
+for %%K in (1 2 3 4 5) do for /f "tokens=2,*" %%a in ('reg query "HKCU\Software\Microsoft\OneDrive\Accounts\Business%%K" /v UserFolder 2^>nul ^| find "UserFolder"') do call :add_base "%%b" 1
+
+REM OneDrive“¯Šúƒ‹[ƒg‚Ìeiƒ‰ƒCƒuƒ‰ƒŠ“¯ŠúƒtƒHƒ‹ƒ_‚Í“¯‚¶ŠK‘w‚Éì‚ç‚ê‚éj
+set "BASE_SNAP=!BASE_N!"
+for /l %%I in (1,1,!BASE_SNAP!) do call :add_parent "!BASE_%%I!"
+
+REM ƒ†[ƒU[ƒvƒƒtƒ@ƒCƒ‹’¼‰º‚Ìƒ‰ƒCƒuƒ‰ƒŠ“¯ŠúƒtƒHƒ‹ƒ_‚É‘Î‰ž
+for /d %%S in ("%USERPROFILE%\*") do call :add_profile_dir "%%~fS"
+call :add_base "%USERPROFILE%" 0
+exit /b
+
+
+:add_parent
+for %%P in ("%~1\..") do call :add_base "%%~fP" 0
+exit /b
+
+
+:add_profile_dir
+set "_n=%~nx1"
+set "_skip="
+for %%X in (
+    "AppData" "Desktop" "Documents" "Downloads" "Favorites" "Links" "Contacts"
+    "Searches" "Saved Games" "Music" "Pictures" "Videos" "3D Objects"
+    "Application Data" "Local Settings" "NetHood" "PrintHood" "Recent"
+    "SendTo" "Templates" "IntelGraphicsProfiles" "MicrosoftEdgeBackups"
+) do if /i "!_n!"=="%%~X" set "_skip=1"
+if defined _skip exit /b
+call :add_base "%~1" 1
+exit /b
+
+
+REM ==============================
+REM ‹N“_Œó•â‚Ì“o˜^i%1=ƒpƒX %2=Ä‹AŒŸõ‚·‚éê‡‚Í1j
+REM ==============================
+:add_base
+set "_b=%~1"
+if not defined _b exit /b
+for %%F in ("!_b!\.") do set "_b=%%~fF"
+if not exist "!_b!\" exit /b
+for /l %%I in (1,1,!BASE_N!) do if /i "!BASE_%%I!"=="!_b!" exit /b
+set /a BASE_N+=1
+set "BASE_!BASE_N!=!_b!"
+set "BASE_DEEP_!BASE_N!=%~2"
+exit /b
+
+
+REM ==============================
+REM Šù’m‚ÌŠK‘wƒpƒ^[ƒ“‚Å”»’èi%1=‹N“_j
+REM ==============================
+:try_root
+if defined SP_DOC_ROOT exit /b
+if "%~1"=="" exit /b
+for %%P in (
+    "SAM_’†•”ƒ`[ƒ€ - ƒhƒLƒ…ƒƒ“ƒg\B01_–Ø‘]ì‰EŠÝŠÇ—Ž––±Š\5215–Ø‘]ì‰EŠÝyŒ_–ñ‹Æ–±z\104.‰^“]E‰^—p‹L˜^\02_“_ŒŸA‹L˜^"
+    "B01_–Ø‘]ì‰EŠÝŠÇ—Ž––±Š\5215–Ø‘]ì‰EŠÝyŒ_–ñ‹Æ–±z\104.‰^“]E‰^—p‹L˜^\02_“_ŒŸA‹L˜^"
+    "5215–Ø‘]ì‰EŠÝyŒ_–ñ‹Æ–±z\104.‰^“]E‰^—p‹L˜^\02_“_ŒŸA‹L˜^"
+    "104.‰^“]E‰^—p‹L˜^\02_“_ŒŸA‹L˜^"
+    "02_“_ŒŸA‹L˜^"
+    "."
+) do if not defined SP_DOC_ROOT call :verify_root "%~1\%%~P"
+exit /b
+
+
+REM ==============================
+REM 03_ŒŸj ‚ðÄ‹AŒŸõi%1=‹N“_j
+REM ==============================
+:deep_root
+if defined SP_DOC_ROOT exit /b
+if "%~1"=="" exit /b
+if not exist "%~1\" exit /b
+for /f "delims=" %%D in ('dir /b /s /ad "%~1\03_ŒŸj" 2^>nul') do if not defined SP_DOC_ROOT call :verify_root "%%~dpD."
+exit /b
+
+
+REM ==============================
+REM •Û‘¶æƒ‹[ƒg‚ÌŒŸØi%1=03_ŒŸj ‚ÌeƒtƒHƒ‹ƒ_Œó•âj
+REM 3Œn“‚·‚×‚Ä‘µ‚Á‚Ä‚¢‚ê‚ÎÌ—pB•s‘«‚ª‚ ‚ê‚Î•”•ª“¯Šú‚Æ‚µ‚Ä‹L˜^
+REM ==============================
+:verify_root
+set "_c=%~1"
+for %%F in ("!_c!\.") do set "_c=%%~fF"
+if not exist "!_c!\03_ŒŸj\" exit /b
+set "_miss="
+if not exist "!_c!\03_ŒŸj\01_‰¡‰Í\" set "_miss=!_miss! 01_‰¡‰Í"
+if not exist "!_c!\03_ŒŸj\02_MƒVƒXƒeƒ€\" set "_miss=!_miss! 02_MƒVƒXƒeƒ€"
+if not exist "!_c!\03_ŒŸj\03_ƒtƒW\" set "_miss=!_miss! 03_ƒtƒW"
+if not defined _miss (
+    set "SP_DOC_ROOT=!_c!"
+    exit /b
+)
+if not defined SP_DOC_PARTIAL (
+    set "SP_DOC_PARTIAL=!_c!"
+    set "SP_DOC_MISSING=!_miss!"
+)
+exit /b
+
+
+REM ==============================
+REM “ú•tŽæ“¾iPowerShell 1‰ñj
+REM ==============================
+:refresh_date
+set "LOGDATE=" & set "YYYYMM="
+for /f "tokens=1,2" %%a in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd yyyyMM')"') do (
+    set "LOGDATE=%%a"
+    set "YYYYMM=%%b"
+)
+if not defined YYYYMM exit /b 1
+set "LOGFILE=%LOGDIR%\ADCS_!LOGDATE!.log"
+exit /b 0
+
+
+REM ==============================
+REM ƒGƒ‰[’Ê’mi‰æ–ÊEƒƒOEŒx‰¹j
+REM ==============================
+:alert_error
+echo.
+echo ššš [ƒGƒ‰[] %~1 ššš
+call :log [ERROR] %~1
+powershell -NoProfile -Command "1..3|%%{[console]::beep(880,400);Start-Sleep -m 200}" >nul 2>&1
+exit /b
+
+
+REM ==============================
+REM ƒƒOiƒtƒ@ƒCƒ‹{‰æ–Êj
+REM ==============================
 :log
-set "_ts="
-for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"`) do set "_ts=%%i"
-echo [!_ts!] %*>>"%LOGFILE%"
+set "_msg=%*"
+set "_t=%TIME: =0%"
+>>"%LOGFILE%" echo [!LOGDATE! !_t:~0,8!] !_msg!
+echo [!_t:~0,8!] !_msg!
 goto :eof
