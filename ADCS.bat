@@ -129,6 +129,7 @@ echo 状態：実行中
 echo 検針ルート：!KENSHIN_ROOT!
 echo 監視ドライブ：%SCAN_DRIVES%
 echo バックアップ：%BACKUP_DRIVE%ドライブ（id_00.txt がある場合のみコピー）
+echo バックアップ構成：系統\年月\設備\!MONTH_DIR!
 echo 対象フォルダ：DATA0 / 71VR / S000000
 echo ログ：!LOGFILE!
 echo ※ 終了：Ctrl + C
@@ -282,7 +283,7 @@ if not exist "!SYS_ROOT!" (
 
 REM ========= バックアップドライブ（COPY） =========
 if exist "%BACKUP_DRIVE%:\id_00.txt" (
-    set "DEST_I=%BACKUP_DRIVE%:\!SYSTEM_DIR!\!YYYYMM!\!FOLDER_NAME!!SUB_PATH!"
+    set "DEST_I=%BACKUP_DRIVE%:\!SYSTEM_DIR!\!YYYYMM!\!FOLDER_NAME!\!MONTH_DIR!!SUB_PATH!"
     if not exist "!DEST_I!" mkdir "!DEST_I!" >nul 2>&1
     if not exist "!DEST_I!" (
         set "I_STATE=NG"
@@ -461,12 +462,14 @@ REM ==============================
 REM 日付取得（PowerShell 1回）
 REM ==============================
 :refresh_date
-set "LOGDATE=" & set "YYYYMM="
-for /f "tokens=1,2" %%a in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd yyyyMM')"') do (
+set "LOGDATE=" & set "YYYYMM=" & set "MONTH_DIR="
+for /f "tokens=1,2,3" %%a in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd yyyyMM M')"') do (
     set "LOGDATE=%%a"
     set "YYYYMM=%%b"
+    set "MONTH_DIR=%%c月"
 )
 if not defined YYYYMM exit /b 1
+if not defined MONTH_DIR exit /b 1
 set "LOGFILE=%LOGDIR%\ADCS_!LOGDATE!.log"
 exit /b 0
 
